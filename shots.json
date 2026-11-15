@@ -1,0 +1,6 @@
+[
+  { "name": "1-firefight.jpg", "query": "?shot=1&seed=7&money=9000&buy=halyard,helm,frag,smoke&t=12.9&at=-28.8,-9.9,-1.28,-0.03&hold=fire&ticks=6" },
+  { "name": "2-planted.jpg", "query": "?shot=1&seed=14&money=9000&buy=halyard,helm,frag,smoke&t=18.6&at=-25.6,-16,-2.53,-0.12&ticks=4" },
+  { "name": "3-buy.jpg", "query": "?shot=1&seed=7&money=9000&buy=halyard&at=0.6,23.2,0.06,-0.05&ticks=30&open=buy" },
+  { "name": "4-scope.jpg", "query": "?shot=1&seed=7&money=9000&buy=longshore,helm&t=1.9&at=-4.8,16.6,-0.2,-0.012&hold=zoom&ticks=20" }
+]

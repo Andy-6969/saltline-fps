@@ -1,0 +1,212 @@
+// The HUD: health, armour, money, ammunition, round timer, score, radar, kill feed, radio, the
+// buy menu and the scoreboard. It reads the state each frame and writes the DOM only when a value
+// has changed.
+
+import { ATK, BUY_ORDER, DEF, GEAR, NADES, NADE_KINDS, RULES, TEAM_NAMES, WEAPONS } from '../sim/config.js';
+import { BOUNDS, BOXES, SITES, regionAt, siteAt } from '../sim/map.js';
+import { EV, teamAlive } from '../sim/state.js';
+import { canBuy } from '../sim/round.js';
+
+const $ = (id) => document.getElementById(id);
+const SCALE = 3; // radar pixels per metre
+const BUY_LABELS = '1234567890-=';
+
+export function createHud(state, input) {
+  const el = {};
+  for (const node of $('hud').querySelectorAll('[id]')) el[node.id] = node; // every HUD element, by its id
+  const cache = new Map();
+  // Write text only when it differs from what the element already shows.
+  const set = (node, text) => { if (cache.get(node) !== text) { cache.set(node, text); node.textContent = text; } };
+  const show = (node, on, mode = 'block') => { const v = on ? mode : 'none'; if (cache.get(node.style) !== v) { cache.set(node.style, v); node.style.display = v; } };
+  const hairs = el.cross.children, bannerB = el.banner.firstElementChild, bannerS = el.banner.lastElementChild;
+  const promptText = el.prompt.firstElementChild, barFill = el.bar.firstElementChild;
+  let bannerT = 0, hitT = 0, slowT = 0;
+
+  // The radar's map layer is drawn once; blips go over a copy of it.
+  const radar = $('radar').getContext('2d');
+  const base = document.createElement('canvas');
+  base.width = 180; base.height = 144;
+  const bg = base.getContext('2d');
+  const rx = (x) => (x - BOUNDS.x0) * SCALE, rz = (z) => (z - BOUNDS.z0) * SCALE;
+  for (const s of SITES) {
+    bg.fillStyle = s.name === 'A' ? 'rgba(232,161,58,.28)' : 'rgba(79,179,168,.28)';
+    bg.fillRect(rx(s.x0), rz(s.z0), (s.x1 - s.x0) * SCALE, (s.z1 - s.z0) * SCALE);
+    bg.fillStyle = '#f1ead9';
+    bg.font = 'bold 13px monospace';
+    bg.fillText(s.name, rx((s.x0 + s.x1) / 2) - 4, rz((s.z0 + s.z1) / 2) + 5);
+  }
+  for (const b of BOXES) {
+    if (b.y0 > 2) continue;
+    bg.fillStyle = b.y1 > 2.5 ? 'rgba(241,234,217,.5)' : 'rgba(241,234,217,.22)';
+    bg.fillRect(rx(b.x0), rz(b.z0), (b.x1 - b.x0) * SCALE, (b.z1 - b.z0) * SCALE);
+  }
+
+  function drawRadar(me) {
+    radar.clearRect(0, 0, 180, 144);
+    radar.drawImage(base, 0, 0);
+    for (const a of state.actors) {
+      // Teammates always; enemies only while their gunfire gives them away.
+      if (!a.alive || (a.team !== me.team && a.sinceShot > 1.5)) continue;
+      radar.fillStyle = a.team !== me.team ? '#e2533f' : a === me ? '#ffffff' : a.team === ATK ? '#e8a13a' : '#4fb3a8';
+      radar.beginPath();
+      radar.arc(rx(a.x), rz(a.z), a === me ? 3.2 : 2.6, 0, 6.3);
+      radar.fill();
+      if (a === me) {
+        radar.strokeStyle = '#ffffff';
+        radar.beginPath();
+        radar.moveTo(rx(a.x), rz(a.z));
+        radar.lineTo(rx(a.x) - Math.sin(a.yaw) * 9, rz(a.z) - Math.cos(a.yaw) * 9);
+        radar.stroke();
+      }
+    }
+    const b = state.bomb;
+    if (b.mode === 'planted' || (me.team === ATK && b.mode !== 'none')) {
+      radar.fillStyle = state.time % 0.6 < 0.3 ? '#ff3020' : '#ffd0a0';
+      radar.fillRect(rx(b.x) - 2.5, rz(b.z) - 2.5, 5, 5);
+    }
+  }
+
+  function buyRows(me) {
+    let html = '';
+    BUY_ORDER.forEach((id, i) => {
+      const item = WEAPONS[id] || NADES[id] || GEAR[id];
+      const off = item.price > me.money || (id === 'kit' && me.team !== DEF);
+      html += `<div class="row${off ? ' no' : ''}"><span>${BUY_LABELS[i]}</span><span>${item.name}${item.kind ? ` <span class="dim">${item.kind}</span>` : ''}</span><span>$${item.price}</span></div>`;
+    });
+    return html;
+  }
+
+  function scoreRows() {
+    let html = '';
+    for (const team of [ATK, DEF]) {
+      html += `<h2 class="${team === ATK ? 'atk' : 'def'}">${TEAM_NAMES[team]}</h2><div class="row dim"><span>Name</span><span>K</span><span>D</span><span>Money</span></div>`;
+      for (const a of state.actors) if (a.team === team) html += `<div class="row${a.alive ? '' : ' no'}"><span>${a.name}</span><span>${a.kills}</span><span>${a.deaths}</span><span>$${a.money}</span></div>`;
+    }
+    return html;
+  }
+
+  function banner(title, sub, seconds) {
+    set(bannerB, title);
+    set(bannerS, sub);
+    bannerT = seconds;
+  }
+  function line(parent, text, cls, max) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    div.className = cls;
+    div.dataset.until = String(state.time + 6);
+    parent.appendChild(div);
+    while (parent.children.length > max) parent.firstElementChild.remove();
+  }
+
+  /** Show what a simulation event means to the player. */
+  function onEvent(e) {
+    const me = state.actors[state.playerId];
+    if (e.type === EV.KILL) {
+      const k = state.actors[e.a], v = state.actors[e.b];
+      line(el.feed, `${k.name}  [${e.s}${e.n === 2 ? ' / head' : e.n === 1 ? ' / wall' : ''}]  ${v.name}`, k === me || v === me ? 'me' : '', 5);
+    }
+    if ((e.type === EV.KILL || e.type === EV.HURT) && e.a === state.viewId && e.b !== e.a) {
+      hitT = 0.18;
+      el.hit.className = e.n === 2 ? 'head' : '';
+    } else if (e.type === EV.RADIO && state.actors[e.a].team === me.team) line(el.radio, `${state.actors[e.a].name}: ${e.s}`, me.team === ATK ? 'atk' : 'def', 4);
+    else if (e.type === EV.PLANTED) banner('CHARGE PLANTED', `Site ${e.s}: ${RULES.bombT} seconds`, 3);
+    else if (e.type === EV.DEFUSED) banner('CHARGE DEFUSED', '', 3);
+    else if (e.type === EV.PICKUP && e.a === me.id) banner('', 'You picked up the charge', 2);
+    else if (e.type === EV.PHASE) {
+      const r = state.round;
+      if (e.s === 'freeze') banner(`ROUND ${r.num}`, state.bomb.carrier === me.id ? 'You carry the charge. Press B to buy.' : 'Press B to buy', RULES.freezeT);
+      else if (e.s === 'live') banner('', me.team === ATK ? 'Plant the charge on A or B' : 'Hold the sites', 2.5);
+      else if (e.s === 'over') banner(`${TEAM_NAMES[r.winner]} win the round`.toUpperCase(), r.reason, RULES.overT);
+      if (e.s !== 'live') { el.feed.replaceChildren(); input.buyOpen = false; }
+    }
+  }
+
+  function update(dt, fovDeg) {
+    const r = state.round, me = state.actors[state.playerId], a = state.actors[state.viewId];
+    const playing = r.num > 0;
+    show($('hud'), playing);
+    if (!playing) return;
+
+    // Score, clock and who is left.
+    const mySquad = me.squad, clock = Math.max(0, r.phase === 'planted' ? state.bomb.timer : r.t);
+    set(el.nameA, TEAM_NAMES[me.team] + ' (you)');
+    set(el.nameB, TEAM_NAMES[1 - me.team]);
+    el.nameA.className = me.team === ATK ? 'atk' : 'def';
+    el.nameB.className = me.team === ATK ? 'def' : 'atk';
+    set(el.scoreA, String(r.score[mySquad]));
+    set(el.scoreB, String(r.score[1 - mySquad]));
+    set(el.pipsA, '●'.repeat(teamAlive(state, me.team)).padEnd(RULES.teamSize, '○'));
+    set(el.pipsB, '●'.repeat(teamAlive(state, 1 - me.team)).padEnd(RULES.teamSize, '○'));
+    set(el.timer, r.phase === 'planted' ? 'CHARGE' : `${Math.floor(clock / 60)}:${String(Math.floor(clock % 60)).padStart(2, '0')}`);
+    el.timer.className = r.phase === 'planted' || (r.phase === 'live' && clock < 15) ? 'hot' : '';
+    set(el.roundNo, r.phase === 'freeze' ? 'buy time' : `round ${r.num} · first to ${RULES.winRounds}`);
+
+    // Vitals and the weapon in hand, for whoever is being watched.
+    set(el.hp, String(Math.ceil(a.hp)));
+    el.hp.style.color = a.hp <= 30 ? 'var(--bad)' : '';
+    set(el.armor, String(Math.ceil(a.armor)));
+    set(el.armorLabel, a.helmet ? 'Armor + helm' : 'Armor');
+    set(el.money, `$${a.money}${a.kit ? '  KIT' : ''}`);
+    const gun = a.slot < 2 ? WEAPONS[a.guns[a.slot]] : null;
+    set(el.gunName, gun ? gun.name : NADES[NADE_KINDS[a.slot - 2]].name + ' grenade');
+    set(el.mag, gun ? String(a.mag[a.slot]) : String(a.nades[a.slot - 2]));
+    set(el.res, gun ? `/ ${a.res[a.slot]}` : '');
+    el.mag.style.color = gun && a.mag[a.slot] <= gun.mag * 0.25 ? 'var(--bad)' : '';
+    set(el.slots, `1 ${a.guns[0] ? WEAPONS[a.guns[0]].name : '-'}   2 ${WEAPONS[a.guns[1]].name}\n3 frag ${a.nades[0]}   4 flash ${a.nades[1]}   5 smoke ${a.nades[2]}${state.bomb.carrier === a.id ? '\nCHARGE' : ''}`);
+    set(el.place, regionAt(a.x, a.z));
+    set(el.spec, a === me ? '' : `Watching ${a.name}`);
+
+    // Crosshair: the gap is the weapon's accuracy cone projected on the screen, so it visibly
+    // opens when you run, jump or spray and closes when you stop.
+    const gap = 3 + (Math.tan(a.spread) / Math.tan((fovDeg * Math.PI) / 360)) * (window.innerHeight / 2);
+    show(el.cross, a.alive && !a.zoomed && !(gun && gun.zoom));
+    for (let i = 0; i < 4; i++) {
+      const h = i < 2, sign = i % 2 ? 1 : -1, len = 7;
+      hairs[i].style.cssText = h
+        ? `left:${sign < 0 ? -gap - len : gap}px;top:-1px;width:${len}px;height:2px`
+        : `top:${sign < 0 ? -gap - len : gap}px;left:-1px;height:${len}px;width:2px`;
+    }
+    hitT -= dt;
+    el.hit.style.opacity = hitT > 0 ? '1' : '0';
+    // Where the last hit on you came from, as an arc turned towards it.
+    el.dmg.style.opacity = String(Math.min(1, a.hurtT * 2));
+    el.dmg.style.transform = `rotate(${a.yaw - a.hurtYaw}rad)`;
+
+    bannerT -= dt;
+
+    // What the use key would do here, and progress bars for planting, defusing and reloading.
+    const b = state.bomb;
+    let hint = '', progress = 0;
+    if (me.alive && me.useT > 0) {
+      hint = me.team === ATK ? 'Planting' : 'Defusing';
+      progress = me.useT / (me.team === ATK ? RULES.plantT : me.kit ? RULES.defuseKitT : RULES.defuseT);
+    } else if (me.alive && me.reloadT > 0 && gun) {
+      hint = 'Reloading';
+      progress = 1 - me.reloadT / gun.reload;
+    } else if (me.alive && b.carrier === me.id && r.phase === 'live') hint = siteAt(me.x, me.z) >= 0 ? 'Hold E to plant the charge' : 'You carry the charge';
+    else if (me.alive && me.team === DEF && r.phase === 'planted' && Math.hypot(me.x - b.x, me.z - b.z) < 1.6) hint = 'Hold E to defuse';
+    set(promptText, hint);
+    show(el.bar, progress > 0);
+    barFill.style.width = `${Math.min(100, progress * 100)}%`;
+
+    // The slower panels refresh four times a second.
+    slowT -= dt;
+    const buying = input.buyOpen && canBuy(state, me);
+    if (input.buyOpen && !buying) input.buyOpen = false;
+    show(el.buy, buying);
+    show(el.scores, input.scores || r.phase === 'match');
+    el.banner.style.opacity = bannerT > 0 && !buying && !input.scores ? '1' : '0';
+    if (slowT <= 0) {
+      slowT = 0.25;
+      drawRadar(a);
+      if (buying) { set(el.buyMoney, `$${me.money}`); el.buyRows.innerHTML = buyRows(me); }
+      if (input.scores || r.phase === 'match') el.scores.innerHTML = scoreRows();
+      for (const list of [el.feed, el.radio]) {
+        while (list.firstElementChild && Number(list.firstElementChild.dataset.until) < state.time) list.firstElementChild.remove();
+      }
+    }
+  }
+
+  return { update, onEvent };
+}

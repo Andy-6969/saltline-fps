@@ -1,0 +1,6 @@
+{
+  "name": "saltline",
+  "private": true,
+  "type": "module",
+  "description": "SALTLINE: a round-based three.js tactical FPS. Serve with `node serve.ts`."
+}

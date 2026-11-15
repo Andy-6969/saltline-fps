@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SALTLINE: Brinehouse Works</title>
+<!--
+  SALTLINE: a round-based tactical shooter, five against five, first to seven. Where things are:
+    src/sim/     the game itself, a fixed 60 Hz simulation of plain numbers (no three.js, no DOM)
+    src/render/  draws the simulation's state with three.js; every texture and model is generated
+    src/ui/      keyboard and mouse in, HUD and synthesised sound out
+    src/main.js  the loop that steps the one and draws the other
+-->
+<style>
+  :root { --ink: #f1ead9; --dim: #a9a08c; --panel: rgba(18, 20, 22, .74); --line: rgba(241, 234, 217, .16); --atk: #e8a13a; --def: #4fb3a8; --bad: #e2533f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0f11; color: var(--ink); font: 14px/1.3 ui-monospace, 'Cascadia Mono', Consolas, monospace; user-select: none; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  #hud > div, #radar { position: absolute; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 8px 12px; }
+  .atk { color: var(--atk); } .def { color: var(--def); } .dim { color: var(--dim); } .big { font-size: 34px; font-weight: 700; line-height: 1; }
+  small { font-size: 10px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; display: block; }
+
+  #top { top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 16px; align-items: center; }
+  #top .side { text-align: center; min-width: 96px; }
+  #timer { font-size: 26px; font-weight: 700; min-width: 76px; text-align: center; }
+  #timer.hot { color: var(--bad); }
+  .pips { letter-spacing: 3px; font-size: 11px; }
+  #radar { top: 12px; left: 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--panel); }
+  #place { top: 164px; left: 12px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+  #feed { top: 12px; right: 12px; text-align: right; }
+  #feed div { margin-bottom: 4px; padding: 3px 8px; background: var(--panel); display: inline-block; clear: both; float: right; border-right: 2px solid var(--line); }
+  #feed .me { border-right-color: var(--bad); }
+  #radio { left: 12px; bottom: 132px; width: 300px; font-size: 12px; }
+  #radio div { margin-top: 3px; text-shadow: 0 1px 2px #000; }
+  #vitals { left: 12px; bottom: 12px; display: flex; gap: 18px; align-items: flex-end; }
+  #money { color: #9fd47c; font-size: 18px; font-weight: 700; }
+  #weapon { right: 12px; bottom: 12px; text-align: right; min-width: 190px; }
+  #slots { margin-top: 6px; font-size: 11px; color: var(--dim); white-space: pre; }
+  #slots b { color: var(--ink); }
+
+  #cross { left: 50%; top: 50%; }
+  #cross i { position: absolute; background: #dfffd6; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55); }
+  #hit { left: 50%; top: 50%; width: 24px; height: 24px; margin: -12px; opacity: 0; transform: rotate(45deg); }
+  #hit::before, #hit::after { content: ''; position: absolute; background: #fff; }
+  #hit::before { left: 11px; top: 0; width: 2px; height: 24px; } #hit::after { top: 11px; left: 0; height: 2px; width: 24px; }
+  #hit.head::before, #hit.head::after { background: var(--bad); }
+  #dmg { left: 50%; top: 50%; width: 220px; height: 220px; margin: -110px; opacity: 0; border-radius: 50%; border: 0 solid transparent; border-top: 10px solid var(--bad); }
+
+  #banner { top: 21%; left: 50%; transform: translateX(-50%); text-align: center; text-shadow: 0 2px 6px #000; transition: opacity .3s; }
+  #banner b { display: block; font-size: 30px; letter-spacing: .12em; }
+  #prompt { bottom: 22%; left: 50%; transform: translateX(-50%); text-align: center; text-shadow: 0 1px 3px #000; }
+  #bar { width: 220px; height: 5px; margin: 6px auto 0; background: rgba(0, 0, 0, .5); display: none; }
+  #bar i { display: block; height: 100%; width: 0; background: var(--atk); }
+  #spec { bottom: 34%; left: 50%; transform: translateX(-50%); letter-spacing: .14em; text-transform: uppercase; }
+
+  #buy, #scores { top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; min-width: 430px; }
+  #buy h2, #scores h2 { margin: 0 0 8px; font-size: 13px; letter-spacing: .18em; text-transform: uppercase; }
+  .row { display: grid; grid-template-columns: 30px 1fr 70px; gap: 8px; padding: 3px 0; border-top: 1px solid var(--line); }
+  .row.no { color: #6d675c; } .row span:last-child { text-align: right; }
+  #scores .row { grid-template-columns: 1fr 40px 40px 70px; }
+
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(10, 11, 12, .62); }
+  .screen.on { display: flex; }
+  .card { width: min(620px, 92vw); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 26px 30px; }
+  .card h1 { margin: 0; font-size: 46px; letter-spacing: .2em; } .card h1 span { color: var(--atk); }
+  .card p { color: var(--dim); margin: 8px 0 16px; }
+  .card button { font: inherit; font-weight: 700; letter-spacing: .1em; color: var(--ink); background: none; border: 1px solid currentColor; border-radius: 3px; padding: 12px 16px; margin-right: 10px; cursor: pointer; }
+  .card button:hover { background: rgba(241, 234, 217, .1); }
+  .keys { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px 22px; margin-top: 18px; font-size: 12px; color: var(--dim); }
+  .keys b { color: var(--ink); }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <canvas id="radar" width="180" height="144"></canvas>
+  <div id="place"></div>
+  <div id="top" class="panel">
+    <div class="side"><small id="nameA"></small><span class="big" id="scoreA">0</span><div class="pips" id="pipsA"></div></div>
+    <div><div id="timer">0:00</div><small id="roundNo"></small></div>
+    <div class="side"><small id="nameB"></small><span class="big" id="scoreB">0</span><div class="pips" id="pipsB"></div></div>
+  </div>
+  <div id="feed"></div>
+  <div id="radio"></div>
+  <div id="vitals" class="panel">
+    <div><small>Health</small><span class="big" id="hp">100</span></div>
+    <div><small id="armorLabel">Armor</small><span class="big dim" id="armor">0</span></div>
+    <div id="money">$800</div>
+  </div>
+  <div id="weapon" class="panel">
+    <small id="gunName"></small>
+    <span class="big" id="mag">0</span> <span class="dim" id="res">/ 0</span>
+    <div id="slots"></div>
+  </div>
+  <div id="cross"><i></i><i></i><i></i><i></i></div>
+  <div id="hit"></div>
+  <div id="dmg"></div>
+  <div id="banner"><b></b><span></span></div>
+  <div id="prompt"><span></span><div id="bar"><i></i></div></div>
+  <div id="spec"></div>
+  <div id="buy" class="panel"><h2>Quartermaster <span class="dim" id="buyMoney"></span></h2><div id="buyRows"></div></div>
+  <div id="scores" class="panel"></div>
+</div>
+
+<div id="menu" class="screen on">
+  <div class="card">
+    <h1>SALT<span>LINE</span></h1>
+    <p>Brinehouse Works. Five against five, first to seven rounds. The Tide Runners carry a thermite charge to the Pump House (A) or the Silo Yard (B); the Harbor Watch hold the sites and defuse it. Stand still to shoot straight. Buy between rounds.</p>
+    <button id="playAtk" class="atk">ATTACK &middot; TIDE RUNNERS</button>
+    <button id="playDef" class="def">DEFEND &middot; HARBOR WATCH</button>
+    <div class="keys">
+      <span><b>W A S D</b> move &middot; <b>Shift</b> walk quietly</span><span><b>Mouse</b> aim &middot; <b>Left</b> fire &middot; <b>Right</b> scope / lob</span>
+      <span><b>Space</b> jump &middot; <b>Ctrl / C</b> crouch</span><span><b>R</b> reload &middot; <b>1 2</b> guns &middot; <b>3 4 5</b> grenades</span>
+      <span><b>B</b> buy menu, then number keys</span><span><b>E</b> hold to plant or defuse &middot; <b>Tab</b> scores</span>
+    </div>
+  </div>
+</div>
+<div id="pause" class="screen"><div class="card"><h1>PAUSED</h1><p>The match is held while the mouse is free.</p><button id="resume">RESUME</button></div></div>
+<div id="end" class="screen"><div class="card"><h1 id="endTitle"></h1><p id="endText"></p><button id="again">NEW MATCH</button></div></div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
