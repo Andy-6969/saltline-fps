@@ -1,0 +1,2 @@
+# Store every file exactly as written: the vendored three.js must stay byte for byte.
+* -text
