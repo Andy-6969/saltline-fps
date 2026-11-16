@@ -11,7 +11,6 @@ export function stageShot(query, state, step, input, draw) {
   const list = (key) => (query.get(key) || '').split(',').filter(Boolean);
   setPlayerTeam(state, query.get('as') === 'def' ? DEF : ATK);
   beginMatch(state);
-  for (const a of state.actors) a.money = Number(query.get('money')) || a.money;
   const buys = list('buy'), held = list('hold'), at = list('at').map(Number);
   const run = (ticks, drive) => {
     for (let i = 0; i < ticks; i++) {
@@ -20,6 +19,15 @@ export function stageShot(query, state, step, input, draw) {
       step();
     }
   };
+  // rounds=N: a bot plays your body through N whole rounds first, so the still is mid-match.
+  const rounds = Number(query.get('rounds')) || 0;
+  if (rounds) {
+    me.isBot = true;
+    while (state.round.num <= rounds && state.round.phase !== 'match') step();
+    me.isBot = false;
+    me.brain = null;
+    Object.assign(me.cmd, { mx: 0, mz: 0, fire: false, zoom: false, reload: false, use: false, crouch: false, walk: false, jump: false, slot: -1 });
+  }
   const live = Number(query.get('t')) || 0;
   if (live > 0) run(Math.round((RULES.freezeT + live) * 60));
   else run(20);

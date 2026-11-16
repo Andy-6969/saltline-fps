@@ -1,10 +1,6 @@
-// Brinehouse Works: an original map, a salt refinery on a tidal quay, written as data.
-// Three lanes run north from the Tide Runners' slipway to the two charge sites:
-//   west  - Long Quay, an open 24 m run that turns into the Pump House (site A)
-//   mid   - the Yard, split by a low wall, feeding the Connector that links both sites
-//   east  - the Packing Shed, roofed and crate-filled, then the Ramp into the Silo Yard (site B)
-// Two cuts cross between the lanes, so every route has a flank. Units are metres; x east, z south.
-// Collision, bullets, navigation, the radar and the renderer all read these same boxes.
+// Brinehouse Works, a salt refinery on a tidal quay, as data. Three lanes run from the slipway:
+// Long Quay to the Pump House (A), the Yard to the Connector, the Packing Shed to the Silo Yard
+// (B), with two cuts between them. Metres; x east, z south. Everything reads these boxes.
 
 export const MAP_NAME = 'Brinehouse Works';
 export const BOUNDS = { x0: -30, z0: -24, x1: 30, z1: 24 };

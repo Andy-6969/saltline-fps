@@ -1,8 +1,7 @@
-// The HUD: health, armour, money, ammunition, round timer, score, radar, kill feed, radio, the
-// buy menu and the scoreboard. It reads the state each frame and writes the DOM only when a value
-// has changed.
+// The HUD: vitals, ammo, clock, score, radar, kill feed, radio, buy menu and scoreboard. It reads
+// the state each frame and writes the DOM only when a value changed.
 
-import { ATK, BUY_ORDER, DEF, GEAR, NADES, NADE_KINDS, RULES, TEAM_NAMES, WEAPONS } from '../sim/config.js';
+import { ATK, BUY_ORDER, DEF, GEAR, NADES, NADE_KINDS, NADE_SLOT, RULES, TEAM_NAMES, WEAPONS } from '../sim/config.js';
 import { BOUNDS, BOXES, SITES, regionAt, siteAt } from '../sim/map.js';
 import { EV, teamAlive } from '../sim/state.js';
 import { canBuy } from '../sim/round.js';
@@ -10,6 +9,11 @@ import { canBuy } from '../sim/round.js';
 const $ = (id) => document.getElementById(id);
 const SCALE = 3; // radar pixels per metre
 const BUY_LABELS = '1234567890-=';
+const BUY_COLUMNS = [['Sidearms & SMG', ['mako', 'vesper']], ['Shotgun & rifles', ['breaker', 'halyard', 'bastion', 'longshore']], ['Gear', ['vest', 'helm', 'kit']], ['Grenades', ['frag', 'flash', 'smoke']]];
+const statLine = (g) => `${g.dmg}${g.pellets > 1 ? '×' + g.pellets : ''} dmg · ${Math.round(g.rate * 60)} rpm · ${g.mag}/${g.reserve}`;
+const BLURB = { vest: 'Armour 100: body hits soak', helm: 'Armour + helmet: no one-tap', kit: 'Defuse in 4 s, not 8',
+  frag: 'Blast up to 7.5 m', flash: 'Blinds whoever faces it', smoke: '15 s wall that blocks sight' };
+for (const id of Object.keys(WEAPONS)) BLURB[id] = statLine(WEAPONS[id]);
 
 export function createHud(state, input) {
   const el = {};
@@ -66,21 +70,38 @@ export function createHud(state, input) {
     }
   }
 
-  function buyRows(me) {
+  // The quartermaster: a card per item in four columns, each with its key, price, what it does
+  // and whether you own it or can afford it.
+  function buyCards(me) {
     let html = '';
-    BUY_ORDER.forEach((id, i) => {
-      const item = WEAPONS[id] || NADES[id] || GEAR[id];
-      const off = item.price > me.money || (id === 'kit' && me.team !== DEF);
-      html += `<div class="row${off ? ' no' : ''}"><span>${BUY_LABELS[i]}</span><span>${item.name}${item.kind ? ` <span class="dim">${item.kind}</span>` : ''}</span><span>$${item.price}</span></div>`;
-    });
+    for (const [title, ids] of BUY_COLUMNS) {
+      html += `<div><small>${title}</small>`;
+      for (const id of ids) {
+        const gun = WEAPONS[id], item = gun || NADES[id] || GEAR[id], key = BUY_LABELS[BUY_ORDER.indexOf(id)];
+        const owned = gun ? me.guns[gun.slot] === id : NADE_SLOT[id] ? me.nades[NADE_SLOT[id] - 2] >= item.max
+          : id === 'kit' ? me.kit : me.armor >= 100 && (id === 'vest' || me.helmet);
+        const state = owned ? 'Owned' : id === 'kit' && me.team !== DEF ? 'Defence only' : item.price > me.money ? 'Too expensive' : '';
+        html += `<div class="item${owned ? ' own' : state ? ' no' : ''}"><b>${key}</b> ${item.name}<i>$${item.price}</i><em>${state || BLURB[id]}</em></div>`;
+      }
+      html += '</div>';
+    }
     return html;
   }
 
+  // The scoreboard: kills, assists, deaths, headshot share, damage dealt and MVP stars; money
+  // shows for your own side only, as it would over a team channel.
   function scoreRows() {
+    const me = state.actors[state.playerId];
     let html = '';
-    for (const team of [ATK, DEF]) {
-      html += `<h2 class="${team === ATK ? 'atk' : 'def'}">${TEAM_NAMES[team]}</h2><div class="row dim"><span>Name</span><span>K</span><span>D</span><span>Money</span></div>`;
-      for (const a of state.actors) if (a.team === team) html += `<div class="row${a.alive ? '' : ' no'}"><span>${a.name}</span><span>${a.kills}</span><span>${a.deaths}</span><span>$${a.money}</span></div>`;
+    for (const team of [me.team, 1 - me.team]) {
+      const r = state.round, won = r.score[team === me.team ? me.squad : 1 - me.squad];
+      html += `<h2 class="${team === ATK ? 'atk' : 'def'}">${TEAM_NAMES[team]} ${won} <span class="dim">${team === ATK ? 'attack' : 'defence'}</span></h2>`;
+      html += '<div class="row dim"><span>Name</span><span>K</span><span>A</span><span>D</span><span>HS</span><span>DMG</span><span>MVP</span><span>Money</span></div>';
+      const side = state.actors.filter((a) => a.team === team).sort((x, y) => y.kills - x.kills || y.dmg - x.dmg);
+      for (const a of side) {
+        const hs = a.kills ? Math.round((a.heads / a.kills) * 100) + '%' : '-';
+        html += `<div class="row${a.alive ? '' : ' no'}${a === me ? ' me' : ''}"><span>${a.name}</span><span>${a.kills}</span><span>${a.assists}</span><span>${a.deaths}</span><span>${hs}</span><span>${a.dmg}</span><span>${'★'.repeat(a.mvps) || '-'}</span><span>${team === me.team ? '$' + a.money : ''}</span></div>`;
+      }
     }
     return html;
   }
@@ -117,7 +138,7 @@ export function createHud(state, input) {
       const r = state.round;
       if (e.s === 'freeze') banner(`ROUND ${r.num}`, state.bomb.carrier === me.id ? 'You carry the charge. Press B to buy.' : 'Press B to buy', RULES.freezeT);
       else if (e.s === 'live') banner('', me.team === ATK ? 'Plant the charge on A or B' : 'Hold the sites', 2.5);
-      else if (e.s === 'over') banner(`${TEAM_NAMES[r.winner]} win the round`.toUpperCase(), r.reason, RULES.overT);
+      else if (e.s === 'over') banner(`${TEAM_NAMES[r.winner]} win the round`.toUpperCase(), `${r.reason} · MVP ${state.actors[r.mvp].name}`, RULES.overT);
       if (e.s !== 'live') { el.feed.replaceChildren(); input.buyOpen = false; }
     }
   }
@@ -200,7 +221,7 @@ export function createHud(state, input) {
     if (slowT <= 0) {
       slowT = 0.25;
       drawRadar(a);
-      if (buying) { set(el.buyMoney, `$${me.money}`); el.buyRows.innerHTML = buyRows(me); }
+      if (buying) { set(el.buyMoney, `$${me.money}`); el.buyRows.innerHTML = buyCards(me); }
       if (input.scores || r.phase === 'match') el.scores.innerHTML = scoreRows();
       for (const list of [el.feed, el.radio]) {
         while (list.firstElementChild && Number(list.firstElementChild.dataset.until) < state.time) list.firstElementChild.remove();

@@ -1,15 +1,14 @@
-// Builds the static scene from the map's boxes: one merged mesh per surface, baked contact
-// shadows, generated windows and cornices, the salt mounds and silos, sky, sun and haze.
-// Nothing here runs per frame; the map is geometry made once.
+// The static scene from the map's boxes, built once: a merged mesh per surface, baked contact
+// shadows, windows, signs, salt mounds and silos, sky, sun and haze.
 
 import * as THREE from 'three';
 import { BOXES, BOUNDS, SITES } from '../sim/map.js';
 import { makeRng } from '../sim/math.js';
-import { SURFACES, makeSurfaceMaterials, makeStencil } from './textures.js';
+import { SURFACES, makeSign, makeSurfaceMaterials, makeStencil } from './textures.js';
 
 /** Where the low evening sun sits; the sky shader, the light and the shadows all use it. */
-export const SUN_DIR = new THREE.Vector3(-0.52, 0.5, 0.69).normalize();
-const SUN_COLOR = 0xffd9a8, HAZE = 0xd9b48c;
+export const SUN_DIR = new THREE.Vector3(-0.55, 0.34, 0.76).normalize();
+const SUN_COLOR = 0xffbf80, HAZE = 0xd8a27a;
 const UNIT = [0, 0, 1, 0, 1, 1, 0, 1]; // UVs of a quad that shows a whole texture
 
 // A growing set of quads that becomes one BufferGeometry.
@@ -121,7 +120,7 @@ function makeSky() {
       float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
         return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
       void main(){ vec3 v = normalize(d); float up = max(v.y, 0.0);
-        vec3 col = mix(vec3(1.0, 0.66, 0.38), vec3(0.22, 0.42, 0.72), pow(up, 0.45));
+        vec3 col = mix(vec3(1.0, 0.56, 0.3), vec3(0.2, 0.36, 0.66), pow(up, 0.5));
         float s = max(dot(v, sun), 0.0);
         col += vec3(1.0, 0.72, 0.4) * (pow(s, 6.0) * 0.5 + pow(s, 900.0) * 30.0);
         vec2 c = v.xz / (v.y + 0.25) * 1.6;
@@ -173,6 +172,19 @@ export function buildWorld(scene, renderer) {
   floor.castShadow = false;
   scene.add(floor);
 
+  // Wall signs, so every screen says where it is: [big, caption, colour, x, y, z, facing].
+  const A = '#e8a13a', B = '#4fb3a8', N = '#c9c2b2';
+  const SIGNS = [['A', 'PUMP HOUSE ↑', A, -24, 2.1, -7.97, 0], ['B', 'SILO YARD ↑', B, 22.5, 2.1, -7.97, 0],
+    ['A', 'PUMP HOUSE', A, -13.03, 2.4, -15, -Math.PI / 2], ['B', 'SILO YARD', B, 13.03, 2.4, -15, Math.PI / 2],
+    ['←A', 'CONNECTOR  B→', N, 7, 2.2, -12.97, 0], ['BRINEHOUSE', 'WORKS', N, 0, 2.7, 16.03, 0],
+    ['←A', 'LONG QUAY', A, -22.03, 2.4, 10, -Math.PI / 2], ['B→', 'PACKING SHED', B, 13.97, 2.4, 10, Math.PI / 2]];
+  for (const [big, small, color, x, y, z, rot] of SIGNS) {
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.975), new THREE.MeshStandardMaterial({ map: makeSign(big, small, color), roughness: 0.6, metalness: 0.2 }));
+    sign.position.set(x, y, z);
+    sign.rotation.y = rot;
+    scene.add(sign);
+  }
+
   // Site markings: a stencilled letter on the paving and a hazard border round the plant zone.
   for (const s of SITES) {
     const color = s.name === 'A' ? '#e8a13a' : '#4fb3a8';
@@ -222,8 +234,8 @@ export function buildWorld(scene, renderer) {
   scene.environmentIntensity = 0.9;
   pmrem.dispose();
   scene.fog = new THREE.FogExp2(HAZE, 0.0075);
-  scene.add(new THREE.HemisphereLight(0xa8c4ec, 0x94714c, 1.5));
-  const sun = new THREE.DirectionalLight(SUN_COLOR, 3.6);
+  scene.add(new THREE.HemisphereLight(0x9fb6e0, 0x8a6244, 1.15));
+  const sun = new THREE.DirectionalLight(SUN_COLOR, 4.2);
   sun.position.copy(SUN_DIR).multiplyScalar(70);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);

@@ -1,6 +1,5 @@
-// The armoury as geometry: every weapon is a table of parts (boxes and barrels) assembled into a
-// model. The first-person view and the soldiers in the world both hold models built here.
-// A gun points down -z with its grip at the origin; sizes are metres.
+// The armoury as geometry: each weapon is a table of boxes and barrels, pointing down -z with the
+// grip at the origin, in metres. The first-person view and the soldiers share these models.
 
 import * as THREE from 'three';
 

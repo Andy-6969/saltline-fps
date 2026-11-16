@@ -1,6 +1,5 @@
-// Transient world effects, all drawn from fixed pools made once: tracers, muzzle flashes, impact
-// dust and sparks, bullet holes, grenades in flight, smoke clouds, explosions and the charge.
-// Events from the simulation start them; update() ages them. Nothing is allocated while playing.
+// World effects from fixed pools: tracers, flashes, dust, sparks, bullet holes, grenades, smoke,
+// blasts and the charge. Sim events start them, update() ages them; nothing allocates in play.
 
 import * as THREE from 'three';
 import { NADES, NADE_KINDS } from '../sim/config.js';

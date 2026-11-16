@@ -1,6 +1,5 @@
-// Every texture in SALTLINE is painted here at load, per pixel, from seeded noise: no image files.
-// One painter per surface returns a colour for (u, v); the same canvas doubles as the bump map,
-// so mortar lines sink and plank edges catch the low sun.
+// Every texture is painted here at load from seeded noise, no image files: one painter per surface
+// gives a colour for (u, v), and the same canvas is the bump map, so mortar sinks and planks catch light.
 
 import * as THREE from 'three';
 import { makeRng } from '../sim/math.js';
@@ -157,6 +156,35 @@ export function makeSpriteTexture(rays = 0) {
   }
   ctx.putImageData(img, 0, 0);
   return new THREE.CanvasTexture(canvas);
+}
+
+/** A painted wall sign: a big letter or word on an enamel panel, with a smaller caption, worn. */
+export function makeSign(big, small, color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 192;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#1d2226';
+  ctx.fillRect(0, 0, 512, 192);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 8;
+  ctx.strokeRect(10, 10, 492, 172);
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 104px system-ui, sans-serif';
+  ctx.fillText(big, 34, 100);
+  const w = ctx.measureText(big).width;
+  ctx.fillStyle = '#efe6d2';
+  ctx.font = '700 38px system-ui, sans-serif';
+  ctx.fillText(small, 34 + w + 26, 100);
+  const img = ctx.getImageData(0, 0, 512, 192);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const k = 0.72 + 0.28 * fbm(((i >> 2) % 512) / 512, (i >> 2) / 512 / 192, 10);
+    img.data[i] *= k; img.data[i + 1] *= k; img.data[i + 2] *= k;
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 /** Painted ground markings and signs: a letter in a ring, as stencilled site markers. */

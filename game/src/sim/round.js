@@ -1,6 +1,5 @@
-// The match: buy time, the live round, the planted charge, the result, money, and the side swap.
-// A round is won by wiping the other team, by the charge going off, by defusing it, or (for the
-// defence) by the clock running out.
+// The match: buy time, the live round, the charge, results, money and the side swap. A round is
+// won by a wipe, the charge going off, a defuse, or (for the defence) the clock.
 
 import { ATK, DEF, ECON, GEAR, NADES, NADE_SLOT, RULES, WEAPONS } from './config.js';
 import { SITES, SPAWNS, siteAt } from './map.js';

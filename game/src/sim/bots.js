@@ -1,16 +1,14 @@
-// Bot brains. Each tick a bot fills in the same command record the player's keyboard fills, so
-// it moves and shoots under the very rules the player does. A brain perceives ten times a second
-// (sight cone, line of sight, smoke, flash blindness, noises), picks a mode for its team's plan,
-// then steers and aims every tick.
-//   attackers: walk an assigned route, throw utility at the choke, plant, then guard the charge
-//   defenders: hold an assigned position, rotate when a teammate calls a site, retake and defuse
+// Bot brains fill the same command record the keyboard fills, so bots play by the player's rules.
+// Ten times a second a brain perceives (sight cone, smoke, flashes, noises) and picks a mode:
+// attackers walk routes, stage, execute with utility, plant and guard; defenders hold angles,
+// rotate on calls, retake and defuse. Steering and aim run every tick.
 
 import { ATK, DEF, NADE_SLOT, WEAPONS } from './config.js';
 import { HOLDS, PLANT_SPOTS, ROUTES, SITES, regionAt, siteAt } from './map.js';
 import { angleDiff, clamp, yawTo } from './math.js';
 import { sightClear } from './collide.js';
 import { findPath } from './nav.js';
-import { EV, emit, eyeY } from './state.js';
+import { EV, emit, eyeY, teamAlive } from './state.js';
 import { smokeBetween } from './grenades.js';
 import { bestGunSlot, gunOf } from './weapons.js';
 import { tryBuy } from './round.js';
@@ -22,7 +20,7 @@ const DEF_POSTS = [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1]]; // [hold group, spot
 
 function makeBrain(id, rng) {
   return {
-    skill: 0.6 + rng() * 0.26, // 0.6..0.86, drawn once per match: each bot has a character
+    skill: 0.6 + (id % 5) * 0.06 + rng() * 0.04, // 0.6..0.88: both squads get the same spread of talent
     mode: 'hold', route: null, leg: 0, post: null, home: 0,
     gx: 0, gz: 0, path: new Float32Array(96), pathLen: 0, pathAt: 0, repathT: 0, pgx: 1e9, pgz: 1e9,
     target: -1, seenT: 0, reactT: 0, aimHead: false, lastX: 0, lastZ: 0, lastT: -99,
@@ -158,7 +156,7 @@ function decide(state, a, br) {
       // staged (or the clock says go), then all of them enter together behind their utility.
       const staging = br.leg === pts.length - 1 && !plan.go;
       if (staging && Math.hypot(pts[br.leg - 1][0] - a.x, pts[br.leg - 1][1] - a.z) < 2) br.staged = true;
-      if (staging && (countStaged(state) >= 3 || r.t < 65)) { plan.go = true; radio(state, a, `Go go, execute ${SITES[site].name}`); }
+      if (staging && (countStaged(state) >= Math.min(3, teamAlive(state, ATK) - (state.actors[state.playerId].isBot ? 0 : 1)) || r.t < 65)) { plan.go = true; radio(state, a, `Go go, execute ${SITES[site].name}`); }
       if (staging) setGoal(br, pts[br.leg - 1][0], pts[br.leg - 1][1]);
       else if (br.leg < pts.length && Math.hypot(pts[br.leg][0] - a.x, pts[br.leg][1] - a.z) < 1.4) {
         if (br.leg === br.route.nade && !br.nadeUsed && br.target < 0) startNade(a, br, (SITES[site].x0 + SITES[site].x1) / 2, (SITES[site].z0 + SITES[site].z1) / 2);

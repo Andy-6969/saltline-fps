@@ -1,6 +1,5 @@
-// SALTLINE entry point: builds the state, the view and the UI, then runs the loop.
-// The simulation advances in fixed 1/60 s steps however fast frames arrive; each frame is drawn
-// part-way between the last two steps, so motion is smooth on any display.
+// SALTLINE entry point: builds state, view and UI, then steps the sim at a fixed 1/60 s and draws
+// each frame part-way between the last two steps.
 
 import { ATK, DEF, TEAM_NAMES, TICK } from './sim/config.js';
 import { EV, createState, setPlayerTeam } from './sim/state.js';

@@ -1,6 +1,5 @@
-// Sound, synthesised with the Web Audio API: no audio files. Gunshots are shaped noise over a
-// low thump, tuned per weapon class; every world sound is panned and faded by where it happened
-// relative to the listener, so a shot from Long Quay sounds like it came from Long Quay.
+// Sound synthesised with Web Audio, no files: gunshots are shaped noise over a thump per weapon
+// class, and every world sound is panned and faded by where it happened.
 
 import { WEAPONS } from '../sim/config.js';
 import { EV } from '../sim/state.js';

@@ -1,6 +1,5 @@
-// The view: owns the three.js renderer, scene and camera, and draws the simulation's state.
-// It reads the state and never writes it. Frames are drawn between simulation steps, so every
-// moving thing is placed by blending its last two stepped positions (`alpha`).
+// The view owns the renderer, scene and camera and draws the sim's state, never writing it;
+// moving things blend their last two stepped positions (`alpha`).
 
 import * as THREE from 'three';
 import { MOVE, WEAPONS } from '../sim/config.js';

@@ -1,6 +1,5 @@
-// The finishing pass. The world is drawn into an HDR, multisampled target; this turns it into the
-// picture on screen: bloom from the bright parts, filmic tone mapping, a little lens fringe,
-// vignette and grain, plus the full-screen states of play (flash blindness, pain, the scope).
+// The finishing pass over the HDR, multisampled frame: bloom, filmic tone mapping, lens fringe,
+// vignette and grain, plus flash blindness, pain and the scope.
 
 import * as THREE from 'three';
 

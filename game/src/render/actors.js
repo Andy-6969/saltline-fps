@@ -1,6 +1,5 @@
-// The soldiers as seen in the world: a jointed figure per actor, posed each frame from the
-// simulation (position, facing, aim pitch, stride, crouch, weapon in hand, death).
-// Tide Runners wear rust-orange oilskins; the Harbor Watch wear navy with pale helmets.
+// A jointed soldier per actor, posed each frame from the sim (facing, aim, stride, crouch, gun,
+// death). Tide Runners wear rust oilskins; the Harbor Watch navy with pale helmets.
 
 import * as THREE from 'three';
 import { ATK, MOVE } from '../sim/config.js'; 

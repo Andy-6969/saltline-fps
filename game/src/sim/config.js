@@ -54,10 +54,8 @@ export const MOVE = {
   crouchRate: 7,
 };
 
-// kick: view punch per shot (rad). sway: sideways recoil amplitude. spread: standing cone (rad),
-// moveSpread: extra cone at full run, so a shot fired on the move goes wide and stopping pays.
-// falloff: damage kept per 10 m. armor: share of damage that passes a vest. wall: share kept
-// through thin cover (0 cannot wallbang).
+// kick/sway: recoil per shot (rad). spread: standing cone; moveSpread: extra at a full run, so
+// stopping pays. falloff: damage kept per 10 m; armor: share through a vest; wall: through cover.
 export const WEAPONS = {
   wren: { name: 'Wren-9', kind: 'pistol', slot: 1, price: 0, reward: 300, dmg: 26, head: 3.6, armor: 0.52, wall: 0.3,
     rate: 6.5, auto: false, mag: 12, reserve: 36, reload: 1.9, falloff: 0.86, spread: 0.007, moveSpread: 0.03,

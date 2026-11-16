@@ -1,6 +1,5 @@
-// The first-person weapon: the gun in your hands, drawn in its own scene over the world so it
-// never clips into a wall. It bobs with your stride, lags behind the mouse, kicks with each shot,
-// dips to reload, throws brass, and lights up with the muzzle flash.
+// The gun in your hands, drawn in its own scene so it never clips a wall: it bobs, sways behind
+// the mouse, kicks, dips to reload, throws brass and lights up with the muzzle flash.
 
 import * as THREE from 'three';
 import { ATK, MOVE, NADE_KINDS, WEAPONS } from '../sim/config.js';
