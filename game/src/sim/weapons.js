@@ -63,6 +63,11 @@ export function hurt(state, victim, attacker, dmg, hitZone, through, cause) {
   }
   dmg = Math.round(dmg);
   if (dmg <= 0 || !victim.alive) return;
+  const dealt = Math.min(dmg, victim.hp);
+  if (attacker.team !== victim.team) {
+    attacker.dmg += dealt;
+    victim.taken[attacker.id] += dealt; // who softened this target up, for assists
+  }
   victim.hp -= dmg;
   victim.hurtT = 0.6;
   victim.hurtYaw = Math.atan2(-(attacker.x - victim.x), -(attacker.z - victim.z));
@@ -78,7 +83,11 @@ export function hurt(state, victim, attacker, dmg, hitZone, through, cause) {
   victim.useT = 0;
   if (attacker.team !== victim.team) {
     attacker.kills++;
+    attacker.roundKills++;
+    if (hitZone === HEAD) attacker.heads++;
     attacker.money = Math.min(ECON.max, attacker.money + (gun ? gun.reward : 300));
+    // An assist is 40 or more damage on a target someone else finished.
+    for (let i = 0; i < victim.taken.length; i++) if (i !== attacker.id && victim.taken[i] >= 40) state.actors[i].assists++;
   }
   if (state.bomb.carrier === victim.id) dropBomb(state, victim);
 }

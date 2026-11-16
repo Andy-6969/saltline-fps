@@ -20,9 +20,9 @@ const FOV = 1.05; // half-angle of the sight cone, radians
 const ATK_ROUTES = [0, 0, 1, 2, 0]; // which route each attacker takes: three main, two flanks
 const DEF_POSTS = [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1]]; // [hold group, spot]: two per site, one mid
 
-function makeBrain(id) {
+function makeBrain(id, rng) {
   return {
-    skill: 0.55 + ((id * 37) % 10) * 0.04, // 0.55..0.91: fixed per bot, so each has a character
+    skill: 0.6 + rng() * 0.26, // 0.6..0.86, drawn once per match: each bot has a character
     mode: 'hold', route: null, leg: 0, post: null, home: 0,
     gx: 0, gz: 0, path: new Float32Array(96), pathLen: 0, pathAt: 0, repathT: 0, pgx: 1e9, pgz: 1e9,
     target: -1, seenT: 0, reactT: 0, aimHead: false, lastX: 0, lastZ: 0, lastT: -99,
@@ -61,16 +61,18 @@ function shop(state, a) {
 export function planRound(state) {
   const site = state.rng() < 0.5 ? 0 : 1;
   state.plan[ATK].site = site;
+  state.plan[ATK].go = false;
   state.plan[DEF].called = -1;
   const n = [0, 0];
   for (let i = 0; i < state.actors.length; i++) {
     const a = state.actors[i];
     const k = n[a.team]++;
     if (!a.isBot) continue;
-    const br = (a.brain ||= makeBrain(a.id));
+    const br = (a.brain ||= makeBrain(a.id, state.rng));
     br.target = br.nadeSlot = -1;
     br.lastT = -99;
     br.nadeUsed = false;
+    br.staged = false;
     br.leg = 0;
     br.repathT = 0;
     if (a.team === ATK) {
@@ -109,7 +111,7 @@ function perceive(state, a, br) {
       // Reaction time: slower for the less skilled and for a target at the edge of vision.
       const edge = Math.abs(angleDiff(yawTo(ex, ez, v.x, v.z), a.yaw)) / FOV;
       br.reactT = 0.16 + (1 - br.skill) * 0.34 + edge * 0.14 + state.rng() * 0.1;
-      if (br.mode === 'hold') br.reactT *= 0.4; // a held angle is pre-aimed: the defender's edge
+      if (br.mode === 'hold') br.reactT *= 0.8; // a held angle is pre-aimed: the defender's edge
       br.seenT = 0;
       br.burst = bestD < 9 ? 9 : bestD < 20 ? 4 : 2;
       br.crouchFight = bestD > 13 && state.rng() < 0.45;
@@ -121,7 +123,7 @@ function perceive(state, a, br) {
       }
       radio(state, a, `Contact, ${regionAt(v.x, v.z)}`);
     }
-    br.aimHead = head || br.skill > 0.8 || br.mode === 'hold'; // a held angle is aimed at head height
+    br.aimHead = head || br.skill > 0.8 || (br.mode === 'hold' && br.skill > 0.68); // a held angle sits at head height
     br.lastX = v.x; br.lastZ = v.z; br.lastT = state.time;
   }
   br.target = best;
@@ -152,13 +154,19 @@ function decide(state, a, br) {
     } else {
       const pts = br.route.pts;
       if (r.t < 38) br.leg = Math.max(br.leg, pts.length - 1); // out of time: go straight in
-      if (br.leg < pts.length && Math.hypot(pts[br.leg][0] - a.x, pts[br.leg][1] - a.z) < 1.4) {
+      // The execute: each attacker waits at the last corner before the site until three are
+      // staged (or the clock says go), then all of them enter together behind their utility.
+      const staging = br.leg === pts.length - 1 && !plan.go;
+      if (staging && Math.hypot(pts[br.leg - 1][0] - a.x, pts[br.leg - 1][1] - a.z) < 2) br.staged = true;
+      if (staging && (countStaged(state) >= 3 || r.t < 65)) { plan.go = true; radio(state, a, `Go go, execute ${SITES[site].name}`); }
+      if (staging) setGoal(br, pts[br.leg - 1][0], pts[br.leg - 1][1]);
+      else if (br.leg < pts.length && Math.hypot(pts[br.leg][0] - a.x, pts[br.leg][1] - a.z) < 1.4) {
         if (br.leg === br.route.nade && !br.nadeUsed && br.target < 0) startNade(a, br, (SITES[site].x0 + SITES[site].x1) / 2, (SITES[site].z0 + SITES[site].z1) / 2);
         br.leg++;
       }
       if (br.leg < pts.length) {
         br.mode = 'route';
-        setGoal(br, pts[br.leg][0], pts[br.leg][1]);
+        if (!staging) setGoal(br, pts[br.leg][0], pts[br.leg][1]);
       } else if (b.carrier === a.id) {
         br.mode = 'plant';
         const p = PLANT_SPOTS[site][a.id % 3];
@@ -191,6 +199,15 @@ function decide(state, a, br) {
 }
 
 function setGoal(br, x, z) { br.gx = x; br.gz = z; }
+
+function countStaged(state) {
+  let n = 0;
+  for (let i = 0; i < state.actors.length; i++) {
+    const o = state.actors[i];
+    if (o.alive && o.team === ATK && o.brain && o.brain.staged) n++;
+  }
+  return n;
+}
 
 function nearestBot(state, a, x, z) {
   const mine = Math.hypot(a.x - x, a.z - z);
@@ -250,7 +267,7 @@ function fight(state, a, br, dt) {
   br.seenT += dt;
   br.errT -= dt;
   if (br.errT <= 0) {
-    const wobble = (1.15 - br.skill) * (br.mode === 'hold' ? 0.022 : 0.065) / (1 + br.seenT * 1.5);
+    const wobble = (1.15 - br.skill) * (br.mode === 'hold' ? 0.025 : 0.05) / (1 + br.seenT * 1.5);
     br.errY = (state.rng() - 0.5) * wobble;
     br.errP = (state.rng() - 0.5) * wobble;
     br.errT = 0.22;

@@ -23,7 +23,8 @@ function makeCmd() {
 function makeActor(id, squad, team, isBot, name) {
   return {
     id, squad, team, isBot, name,
-    alive: false, hp: 0, armor: 0, helmet: false, kit: false, money: ECON.start, kills: 0, deaths: 0,
+    alive: false, hp: 0, armor: 0, helmet: false, kit: false, money: ECON.start,
+    kills: 0, deaths: 0, assists: 0, heads: 0, dmg: 0, mvps: 0, roundKills: 0, taken: new Float32Array(RULES.teamSize * 2),
     x: 0, y: 0, z: 0, px: 0, py: 0, pz: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0,
     h: MOVE.standH, crouch: 0, onGround: true, stride: 0,
     guns: [null, 'wren'], mag: [0, 0], res: [0, 0], nades: [0, 0, 0], slot: 1,
@@ -41,7 +42,7 @@ export function createState(seed, playerTeam) {
     nades: [],
     // The charge: carried by an attacker, dropped where its carrier fell, or planted on a site.
     bomb: { mode: 'none', carrier: -1, x: 0, y: 0, z: 0, site: -1, timer: 0, beepT: 0, defuser: -1, planter: -1 },
-    round: { phase: 'menu', t: 0, num: 0, score: [0, 0], lossRun: [0, 0], atkSquad: playerTeam === ATK ? 0 : 1, winner: -1, reason: '', matchOver: false, fresh: false },
+    round: { phase: 'menu', t: 0, num: 0, score: [0, 0], lossRun: [0, 0], atkSquad: playerTeam === ATK ? 0 : 1, winner: -1, reason: '', mvp: -1, matchOver: false, fresh: false },
     // Each team's plan for the round: the site attackers push, the site defenders believe is hit.
     plan: [{ site: 0, called: -1, calledT: 0, radioT: -9 }, { site: 0, called: -1, calledT: 0, radioT: -9 }],
     events: [], evCount: 0,

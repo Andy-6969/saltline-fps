@@ -45,6 +45,8 @@ export function startRound(state) {
     a.slot = bestGunSlot(a);
     a.crouch = a.cooldown = a.reloadT = a.drawT = a.shots = a.punchP = a.punchY = a.flashT = a.useT = a.hurtT = 0;
     a.zoomed = a.triggerHeld = false;
+    a.roundKills = 0;
+    a.taken.fill(0);
     if (a.team === ATK) a.kit = false;
   }
   for (let i = 0; i < state.nades.length; i++) state.nades[i].live = false;
@@ -69,7 +71,7 @@ export function startMatch(state) {
     const a = state.actors[i];
     a.alive = false;
     a.money = ECON.start;
-    a.kills = a.deaths = 0;
+    a.kills = a.deaths = a.assists = a.heads = a.dmg = a.mvps = 0;
   }
   startRound(state);
 }
@@ -85,11 +87,19 @@ function endRound(state, winner, reason) {
   const lossPay = Math.min(ECON.lossMax, ECON.lossBase + ECON.lossStep * r.lossRun[lost]);
   r.lossRun[lost]++;
   r.lossRun[won] = 0;
+  // The round's MVP: the winner who planted or defused, else the winner with the most kills.
+  let mvp = null;
   for (let i = 0; i < state.actors.length; i++) {
     const a = state.actors[i];
     pay(a, a.team === winner ? ECON.win : lossPay);
     a.useT = 0;
+    if (a.team === winner && (!mvp || a.roundKills > mvp.roundKills)) mvp = a;
   }
+  const b = state.bomb;
+  if (reason === 'Charge defused') mvp = state.actors[b.defuser];
+  else if (reason === 'The charge went off') mvp = state.actors[b.planter];
+  mvp.mvps++;
+  r.mvp = mvp.id;
   r.matchOver = r.score[won] >= RULES.winRounds;
   emit(state, EV.PHASE).s = 'over';
 }

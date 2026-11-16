@@ -61,7 +61,9 @@ crate(-23.6, -3);
 crate(-23.4, -1.4, 1.2, 0.75);
 box(-29.7, -5.7, -28.9, -4.9, 1.05, 'rust', 'barrel');
 box(-28.8, -6.3, -28, -5.5, 1.05, 'rust', 'barrel');
-// Yard and Connector:
+// Yard and Connector. The tall stack in the Connector breaks the long sightline from the
+// Watch House door up the Yard, so mid is fought at corners rather than across 30 m.
+box(-0.9, -11.2, 0.9, -9.8, 2.6, 'wood');
 crate(3, 1);
 crate(-5.6, -3.4);
 crate(-4, 13);
@@ -143,7 +145,7 @@ export const HOLDS = [
   [
     { x: 1.3, z: -16.6, lx: 0, lz: 0, crouch: false },
     { x: -4.8, z: -4.4, lx: 0, lz: 14, crouch: true },
-    { x: 0, z: -11, lx: 0, lz: 10, crouch: false },
+    { x: 0, z: -12.4, lx: -8, lz: -10.5, crouch: false },
   ],
 ];
 
